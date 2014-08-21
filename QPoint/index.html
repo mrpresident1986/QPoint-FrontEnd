@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="format-detection" content="telephone-no">
+    <meta name="viewport" content="user-scalable=no, initial-scale=1, minimum-scale=1, maximum-scale=1, width=device-width, height=device-height, target-densitydpi=device-dpi">
+    <title>QPoint</title>
+    <link rel="stylesheet" href="css/themes/default/jquery.mobile-1.4.3.css">
+    <link rel="stylesheet" href="css/main.css">
+    <script src="js/jquery.js"></script>
+    <script src="js/jquery.mobile-1.4.3.js"></script>
+    <script src="js/cordova-2.3.0.js"></script>
+    <script src="js/mustache.js"></script>
+    <script type="text/javascript" src="http://maps.googleapis.com/maps/api/js?sensor=false"></script>
+    <link href="http://code.google.com/apis/maps/documentation/javascript/examples/default.css" rel="stylesheet" type="text/css" />
+    <script>
+        var db;
+        var authCode, type;
+        var action;
+        var name, date, time, desc, locationLat, locationLng;
+        var companyName, lat, lng, fromTime, toTime, serviceDuration, employeeNo, phone, about, workingHours;
+        var map, marker;
+        var mapId;
+        $(document).on("pageinit", function(){
+            //onDeviceReady();
+            $('#loading').on('pagecreate', function(event){
+               $("body").addClass("base");
+            });
+            $('#loading').on('pageshow', function(event){
+                window.setTimeout(function() {
+                    window.location.href = action;
+                }, 2000);
+            });
+
+            $('#loading').on('pagecreate', function(event){
+                $("body").addClass("base");
+            });
+
+            $('#serviceSetup').on('pagecreate', function(event){
+                mapId = 'coMap';
+                navigator.geolocation.getCurrentPosition(onGeoSuccess, onGeoError);
+            });
+
+            $('#newMeeting').on('pagecreate', function(event){
+                mapId = 'map';
+                navigator.geolocation.getCurrentPosition(onGeoSuccess, onGeoError);
+            });
+
+            $('#meetingAtends').on('pageshow', function(event){
+                var name = "option";
+                var id = "id";
+
+                $("#atendsList").html('<fieldset data-role="controlgroup"><legend>Seleziona le categorie da eliminare:</legend></fieldset>');
+                for (var i = 0; i < 4; i++) {
+                    $("fieldset").append('<input type="checkbox" name="' + name + '" id="id' + i + '"><label for="id' + i + '">' + name + ' ' + i + '</label>');
+                }
+                $("#atendsList").append('<a href="#" data-role="button" data-inline="true" id="btndelcat">Elimina</a>');
+                $("#atendsList").trigger('create');
+            });
+
+            $('#report').on('pagecreate', function(event){
+
+            });
+        });
+
+        function init() {
+            document.addEventListener("deviceready", onDeviceReady, false);
+        }
+
+        function onDeviceReady() {
+            var networkstate = navigator.connection.type;
+            if(networkstate == "none")
+            {
+                $(".offline").css("visibility","visible");
+                $('#userHomeContent').hide();
+            }else{
+                $(".offline").css("visibility","hidden");
+                $('#userHomeContent').show();
+            }
+
+            db = window.openDatabase("qpoint", "1.0", "QPoint", 200000);
+            db.transaction(getDBData, onDbError, onDbSuccess);
+        }
+
+        function register(){
+            $("input[name*=radio-reg-]:checked").each(function() {
+                type = $(this).val();
+            });
+
+            $.ajax({
+                type: 'POST',
+                url: 'http://10.62.161.190:8082/QPoint/api/v1/qpoint/register',
+                contentType: 'application/json; charset=utf-8',
+                //data: 'ID=1&Name=John&Age=10', // or $('#myform').serializeArray()
+                data:{
+                    uuid : device.uuid,
+                    name :device.name,
+                    version : device.version,
+                    platform : device.platform,
+                    type : type
+                },
+                dataType: 'json',
+                success: function(data, status, jqXHR) {
+                    var nextPage;
+                    if(type === "NORMAL"){
+                        nextPage = '#userHome';
+                    }else if(type === "SERVICEPROVIDER"){
+                        nextPage = '#serviceSetup';
+                    }else{
+                        nextPage = '#employeeSetup';
+                    }
+
+                    authCode = data.authCode;
+                    db.transaction(DBRegister, DBError, DBSuccess);
+
+                    window.location.href = nextPage;
+                },
+
+                error: function (jqXHR, status) {
+                    //need to be handeled
+                }
+            });
+        }
+
+        function onGeoSuccess(position) {
+            lat = position.coords.latitude;
+            lon = position.coords.longitude;
+            var currentposition = new google.maps.LatLng(lat,lon);
+
+            var mapoptions = {
+                zoom: 16,
+                center: currentposition,
+                mapTypeId: google.maps.MapTypeId.ROADMAP
+            };
+
+            map = new google.maps.Map(document.getElementById(mapId), mapoptions);
+
+
+            marker = new google.maps.Marker({
+                position: currentposition,
+                map: map,
+                animation:google.maps.Animation.DROP,
+                draggable:true,
+                title:"Drag me!"
+            });
+        }
+
+        function onGeoError(error) {
+            if (error == 1) {
+                alert('Turn on Geolocation services.');
+            }
+        }
+
+        function DBRegister(tx){
+            tx.executeSql("CREATE TABLE IF NOT EXISTS USER (authCode, type)");
+            tx.executeSql("INSERT INTO USER (authCode, type) VALUES (?, ?)",[authCode,type]);
+        }
+
+        function DBError(err) {
+           //handele error
+        }
+
+        function DBSuccess() {
+            //handle success
+        }
+
+        function getDBData(tx) {
+            //tx.executeSql("CREATE TABLE IF NOT EXISTS NOTES (notetitle, notedetail, imagesource, notelat, notelon)");
+            tx.executeSql("SELECT * FROM USER", [], onAuthSuccess, onAuthError);
+        }
+
+        function onAuthSuccess(tx, results) {
+            var len = results.rows.length;
+            for(var i = 0; i<len; i++) {
+                authCode = results.rows.item(i).authCode;
+                type = results.rows.item(i).type;
+            }
+
+            if(authCode != null){
+                if(type === "NORMAL"){
+                    action = '#userHome';
+                }else if(type === "SERVICEPROVIDER"){
+                    action = '#compHome';
+                }else{
+                    action = '#employeeHome';
+                }
+            }else{
+                action = '#userRegister';
+            }
+        }
+
+        function onAuthError(error) {
+            action = '#userRegister';
+        }
+
+        function onDbSuccess(tx, results) {
+            console.log('Database call successful');
+        }
+
+        function onDbError(error) {
+            alert("Database error " + error.message);
+        }
+
+        function meetingNext(){
+            name = $('meetingName').val();
+            date = $('date').val();
+            time = $('time').val();
+            desc = $('meetingDesc').val();
+            locationLat = marker.position.lat();
+            locationLng = marker.position.lng();
+            window.location.href = '#meetingAtends';
+        }
+
+        function saveServiceSetup() {
+            companyName = $('companyName').val();
+            fromTime = $('fromTime').val();
+            toTime = $('toTime').val();
+            serviceDuration = $('serviceDuration').val();
+            employeeNo = $('employeeNo').val();
+            phone = $('phone').val();
+            about = $('about').val();
+            lat = marker.position.lat();
+            lng = marker.position.lng();
+
+            alert(companyName);
+
+            var auto;
+
+            if ($('#auto').is(':checked')) {
+                auto = 1;
+            }else{
+                 auto = 0;
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: 'http://10.62.161.190:8082/QPoint/api/v1/qpoint/service/setup',
+                contentType: 'application/json; charset=utf-8',
+                //data: 'ID=1&Name=John&Age=10', // or $('#myform').serializeArray()
+                data:{
+                        authCode : authCode,
+                        companyName : companyName,
+                        fromTime : fromTime,
+                        toTime : toTime,
+                        serviceAverageDuration : serviceDuration,
+                        employeeNo : employeeNo,
+                        phoneNumber : phone,
+                        about : about,
+                        lat : lat,
+                        lng : lng,
+                        automation : auto
+                },
+                dataType: 'json',
+                success: function(data, status, jqXHR) {
+                    alert(data);
+                    window.location.href = '#compHome';
+
+                },
+
+                error: function (jqXHR, status) {
+                    //need to be handeled
+                }
+            });
+
+            window.location.href = '#compHome';
+        }
+
+    </script>
+</head>
+<body onload="init()">
+
+<div data-role="page" id="loading" class="base">
+    <div data-role="content" id="content">
+        <div class="modal">
+            <img src="img/icon.png" class="loadingLogo"/>
+            <header class="loadingHeader">Welcome to QPoint</header>
+            <h4 class="loadingDesc">Your easy way to schedule meeting and crowd avoiding</h4>
+        </div>
+    </div>
+</div>
+
+<div data-role="page" id="userRegister">
+    <div data-role="header" class="logo">
+        <img src="img/logo.png" />
+    </div>
+    <div data-role="content">
+       <div id="userList">
+            <form>
+                <fieldset data-role="controlgroup">
+                    <legend>Register as:</legend>
+                    <input type="radio" name="radio-reg-user" id="normal" value="NORMAL" checked="checked">
+                    <label for="normal">User</label>
+                    <input type="radio" name="radio-reg-user" id="serviceProvider" value="SERVICEPROVIDER">
+                    <label for="serviceProvider">Service Provider</label>
+                    <input type="radio" name="radio-reg-user" id="employee" value="EMPLOYEE">
+                    <label for="employee">Employee</label>
+                </fieldset>
+            </form>
+        </div>
+        <input id="register" type="button" data-theme="a" value="Register" onclick="register()"/>
+    </div>
+</div>
+
+<div data-role="page" id="serviceSetup">
+    <div data-role="header" class="logo">
+        <img src="img/logo.png" />
+    </div>
+    <div data-role="content">
+        <h3>Company Name:</h3> <input type="text" data-clear-btn="true" name="companyName" id="companyName" value="" placeholder="Name"/>
+        <h3>Address:</h3><div id="coMap"></div>
+        <h3>Working Hours:</h3>
+        <div class="ui-field-contain">
+            <legend>From:</legend> <input type="time" data-clear-btn="true" name="fromTime" id="fromTime" value="">
+            <legend>To:</legend> <input type="time" data-clear-btn="true" name="toTime" id="toTime" value="">
+        </div>
+        <h3>Average Service Duration:</h3> <div class="ui-field-contain"><input type="number" data-clear-btn="true" name="serviceDuration" id="serviceDuration" value=""/> <legend>Minutes</legend></div>
+        <h3>Number Of Employees:</h3> <input type="number" data-clear-btn="true" name="serviceDuration" id="employeeNo" value=""/>
+        <h3>Phone Number:</h3> <input type="number" data-clear-btn="true" name="phone" id="phone" value=""/>
+        <h3>About Company:</h3> <textarea cols="40" rows="8" name="about" id="about" value="" placeholder="About"></textarea>
+
+        <div class="ui-checkbox">
+            <label for="auto" class="ui-btn ui-corner-all ui-btn-inherit ui-btn-icon-left ui-checkbox-off">Enable Queue Automation</label>
+            <input type="checkbox" name="auto" id="auto" data-enhanced="true">
+        </div>
+
+        <input id="saveService" type="button" data-theme="a" value="Save" onclick="saveServiceSetup()"/>
+    </div>
+</div>
+
+<div data-role="page" id="userHome">
+    <div data-role="header" class="logo">
+        <img src="img/logo.png" />
+    </div>
+    <div data-role="content" id="userHomeContent">
+        <a href="#newMeeting" data-role="button" data-icon="plus">Schedule Meeting</a>
+        <a href="#newAppointment" data-role="button" data-icon="plus">Schedule Appointment</a>
+        <a href="#queueNo" data-role="button" data-icon="plus">Get Queue Number</a>
+        <a href="#report" data-role="button" data-icon="plus">Report Crowding</a>
+    </div>
+    <div data-role="footer" data-theme="c">
+        <h2 class="offline">Offline Mode</h2>
+    </div>
+</div>
+
+<div data-role="page" id="compHome">
+    <div data-role="header" class="logo">
+        <img src="img/logo.png" />
+    </div>
+    <div data-role="content" id="compHomeContent">
+        <a href="#report" data-role="button" data-icon="plus">Daily Report</a>
+    </div>
+    <div data-role="footer" data-theme="c">
+        <h2 class="offline">Offline Mode</h2>
+    </div>
+</div>
+
+<div data-role="page" id="employeeHome">
+    <div data-role="header" class="logo">
+        <img src="img/logo.png" />
+    </div>
+    <div data-role="content" id="employeeHomeContent">
+        <a href="#newMeeting" data-role="button" data-icon="plus">Schedule Meeting</a>
+    </div>
+    <div data-role="footer" data-theme="c">
+        <h2 class="offline">Offline Mode</h2>
+    </div>
+</div>
+
+<div data-role="page" id="newMeeting">
+    <div data-role="header" class="logo">
+        <img src="img/logo.png" />
+    </div>
+    <div data-role="content">
+        <h3>Name:</h3> <input type="text" data-clear-btn="true" name="meetingName" id="meetingName" value="" placeholder="Name"/>
+        <h3>Date:</h3> <input type="date" data-clear-btn="true" name="date" id="date" value="">
+        <h3>Time:</h3> <input type="time" data-clear-btn="true" name="time" id="time" value="">
+        <h3>Description:</h3> <textarea cols="40" rows="8" name="meetingDesc" id="meetingDesc" value="" placeholder="Description"></textarea>
+        <h3>Location:</h3><div id="map"></div>
+        <input id="meetingNext" type="button" data-theme="a" value="Next" onclick="meetingNext()"/>
+    </div>
+</div>
+
+<div data-role="page" id="meetingAtends">
+    <div data-role="header" class="logo">
+        <img src="img/logo.png" />
+    </div>
+    <div data-role="content">
+        <h3>Select Attendees:</h3>
+        <div id="atendsList"></div>
+    </div>
+</div>
+
+
+<div data-role="page" id="newnote">
+    <div data-role="header" class="logo">
+        <img src="img/logo.png" />
+    </div>
+    <div id="notedetailcontent" data-role="content">
+        <input type="text" name="notetitle" id="notetitle" value="" placeholder="Note Title"/>
+        <textarea cols="40" rows="8" name="notedetail" id="notedetail" placeholder="Note Detail"></textarea>
+        <input id="addphoto" type="button" data-icon="plus" value="Add a Photo" /><img id="noteimage" src="" />
+        <div id="map1">Map Placeholder</div>
+        <input id="savenote" type="button" data-theme="a" value="Save Note" />
+    </div>
+    <div data-role="footer" data-theme="c">
+        <p>SnapNote!</p>
+    </div>
+</div>
+</div>
+</body>
+</html>
