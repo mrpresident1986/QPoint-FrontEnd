@@ -14,6 +14,7 @@
     <script type="text/javascript" src="http://maps.googleapis.com/maps/api/js?sensor=false"></script>
     <link href="http://code.google.com/apis/maps/documentation/javascript/examples/default.css" rel="stylesheet" type="text/css" />
     <script>
+        // url: 'http://10.62.161.190:8082/QPoint/api/v1/qpoint/register'
         var db;
         var authCode, type;
         var action;
@@ -89,7 +90,7 @@
 
             $.ajax({
                 type: 'POST',
-                url: 'http://10.62.161.190:8082/QPoint/api/v1/qpoint/register',
+                url: 'http://qpoint.herokuapp.com/rest/v1/qpoint/register',
                 contentType: 'application/json; charset=utf-8',
                 //data: 'ID=1&Name=John&Age=10', // or $('#myform').serializeArray()
                 data:{
@@ -234,7 +235,7 @@
 
             $.ajax({
                 type: 'POST',
-                url: 'http://10.62.161.190:8082/QPoint/api/v1/qpoint/service/setup',
+                url: 'http://qpoint.herokuapp.com/rest/v1/qpoint/service/setup',
                 contentType: 'application/json; charset=utf-8',
                 //data: 'ID=1&Name=John&Age=10', // or $('#myform').serializeArray()
                 data:{
